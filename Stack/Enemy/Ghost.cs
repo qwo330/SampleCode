@@ -1,15 +1,34 @@
 ﻿using System.Collections;
 using UnityEngine;
-namespace Objects.Enemy
+
+public class Ghost : BaseEnemy, IAttackable
 {
-    public class Ghost : BaseEnemy
+    Coroutine attackRoutine;
+
+    public override void SetEnemy(int level)
     {
-        void Start()
+        maxHP = 1 + (int)(level * 0.5f);
+        hp = maxHP;
+        moveSpeed = 3f;
+        attackInterval = 3f;
+
+        attackRoutine = StartCoroutine(CO_Attack());
+    }
+
+    public IEnumerator CO_Attack()
+    {
+        while (InGameManager.Instance.CheckPlaying())
         {
-            maxHP = 3;
-            hp = maxHP;
-            moveSpeed = 1.5f;
-            attackInterval = 4f;
+            yield return new WaitForSeconds(attackInterval);
+
+            GameObject bullet = ObjectPool.Get.GetObject(Defines.key_EnemyBullet);
+            bullet.transform.position = new Vector3(transform.position.x, transform.position.y - 1f, 0f);
         }
+    }
+
+    protected override void Dead()
+    {
+        base.Dead();
+        StopCoroutine(attackRoutine);
     }
 }

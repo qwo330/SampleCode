@@ -5,14 +5,8 @@ using UnityEngine.EventSystems;
 
 public abstract class Player : MonoBehaviour
 {
-    [SerializeField]
-    float MoveSpeed = 3f;
-
-    [SerializeField]
-    float JumpSpeed = 8f;
-
-    [SerializeField]
-    float JumpHeight = 3f;
+    float MoveSpeed = 5f;
+    float JumpPower = 8f;
 
     [SerializeField]
     float AttackInterval = 0.15f;
@@ -20,40 +14,49 @@ public abstract class Player : MonoBehaviour
     [SerializeField]
     int MaxBulletCount = 50;
 
+    [SerializeField]
+    protected BaseSkill[] skills;
+
     Rigidbody rb;
     Animator anim;
     
-    bool isJump = false;
-    bool isFirstTouch = false;
-    float height = 0f;
+    bool isJumping = false;
     float lastTouchTime;
-    float jumpSpeed;
-
 
     public float MaxHP { get; protected set; }
     public float Hp { get; protected set; }
 
     protected Vector3 bulletOffset = new Vector3(0f, 1f, 0f);
+    protected Vector3 startPosisiton = new Vector3(3f, 0f, 0f);
 
     protected abstract void SetPlayer();
     public abstract void Skill_1();
     public abstract void Skill_2();
     public abstract void Skill_3();
 
-    public void Init()
+    Coroutine attackCoroutine;
+
+    public void GetPlayer()
     {
         rb = GetComponent<Rigidbody>();
         anim = GetComponent<Animator>();
-
-        SetPlayer();
-        StartCoroutine(CO_Attack());
     }
-    
+
+    public void Init()
+    {
+        transform.position = startPosisiton;
+        SetPlayer();
+
+        if (attackCoroutine != null)
+            StopCoroutine(attackCoroutine);
+        attackCoroutine = StartCoroutine(CO_Attack());
+    }
+
     protected IEnumerator CO_Attack()
     {
         while (true)
         {
-            if (InGameManager.Instance.CurrentState == GameState.Play)
+            if (InGameManager.Instance.CheckPlaying())
             {
                 Bullet bullet = ObjectPool.Get.GetObject(Defines.key_Bullet).GetComponent<Bullet>();
                 bullet.Init(transform.position + bulletOffset);
@@ -82,33 +85,17 @@ public abstract class Player : MonoBehaviour
         }
     }
 
-    void FixedUpdate()
-    {
-        if (isJump)
-        {
-            Jump();
-        }
-    }
-
     void CheckJump()
     {
-        if ((Time.time - lastTouchTime) < 0.25f && !isJump)
+        if ((Time.time - lastTouchTime) < 0.25f && !isJumping)
         {
-            isJump = true;
+            isJumping = true;
             anim.SetBool(Defines.key_Jump, true);
-            height = transform.position.y + JumpHeight;
+            rb.AddForce(Vector3.up * JumpPower, ForceMode.Impulse);
         }
         lastTouchTime = Time.time;
     }
-
-    void Jump()
-    {
-        if (transform.position.y < height)
-            transform.Translate(0, JumpSpeed * Time.deltaTime, 0);
-        else
-            JumpSpeed = 0;
-    }
-
+    
     void Move()
     {
         Vector3 touchPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -141,18 +128,21 @@ public abstract class Player : MonoBehaviour
             }
 
             float x = pos.x + (dir.x * MoveSpeed * Time.deltaTime);
-            x = Mathf.Clamp(x, 0f, 8f);
+            x = Mathf.Clamp(x, 0f, Defines.Screen_Width);
             transform.position = new Vector3(x, pos.y, pos.z);
         }
     }
 
     void OnCollisionEnter(Collision collision)
     {
-        if (collision.gameObject.CompareTag(Defines.key_Ground) || rb.velocity.y == 0)
+        if (collision.gameObject.CompareTag(Defines.key_Ground))
         {
-            isJump = false;
-            jumpSpeed = JumpSpeed;
-            anim.SetBool(Defines.key_Jump, false);
+            var cube = collision.gameObject.GetComponent<ManaCube>();
+            if (cube == null || cube.isGround)
+            {
+                isJumping = false;
+                anim.SetBool(Defines.key_Jump, false);
+            }
         }
     }
 
@@ -160,14 +150,16 @@ public abstract class Player : MonoBehaviour
     {
         if (other.gameObject.CompareTag(Defines.key_Enemy) || other.gameObject.CompareTag(Defines.key_EnemyBullet))
         {
-            Damage(10);
+            Hit(10);
         }
     }
 
-    void Damage(float power)
+    void Hit(float power)
     {
+        Debug.Log("get damage");
+
         Hp = Mathf.Clamp(Hp - power, 0, MaxHP);
-        InGameManager.Instance.playerHitEvent.Invoke(Hp/MaxHP);
+        InGameManager.Instance.PlayerHitEvent.Invoke(Hp / MaxHP);
         if (Hp <= 0)
             InGameManager.Instance.GameOver();
     }

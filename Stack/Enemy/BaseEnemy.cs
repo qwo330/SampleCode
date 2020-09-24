@@ -1,6 +1,11 @@
 ﻿using UnityEngine;
 using System.Collections;
 
+public interface IAttackable
+{
+    IEnumerator CO_Attack();
+}
+
 public abstract class BaseEnemy : MonoBehaviour
 {
     [SerializeField]
@@ -12,8 +17,6 @@ public abstract class BaseEnemy : MonoBehaviour
     [SerializeField]
     protected float attackInterval;
 
-    Coroutine attackRoutine;
-
     void FixedUpdate()
     {
         Move();
@@ -21,39 +24,23 @@ public abstract class BaseEnemy : MonoBehaviour
 
     void Move()
     {
-        transform.Translate(0f, -moveSpeed * Time.deltaTime, 0f);
+        if (InGameManager.Instance.CheckPlaying())
+            transform.Translate(0f, -moveSpeed * Time.deltaTime, 0f);
     }
 
-    public void SetEnemy()
-    {
-        hp = maxHP;
-        attackRoutine = StartCoroutine(CO_Attack());
-    }
+    public abstract void SetEnemy(int level);
 
-    public virtual IEnumerator CO_Attack()
-    {
-        while (true)
-        {
-            yield return new WaitForSeconds(attackInterval);
-
-            GameObject bullet = ObjectPool.Get.GetObject(Defines.key_HitEffect);
-            bullet.transform.position = new Vector3(transform.position.x, transform.position.y - 1f, 0f);
-        }
-    }
-
-
-    public void Damage()
-    {
-        hp--;
+    public void Hit(int power = 1)
+    { 
+        hp -= power;
         if (hp <= 0)
         {
             Dead();
         }
     }
 
-    void Dead()
+    protected virtual void Dead()
     {
-        StopCoroutine(attackRoutine);
         ShowDeadEffect();
         DropManaStone();
         ObjectPool.Get.ReturnObject(gameObject);
@@ -61,7 +48,9 @@ public abstract class BaseEnemy : MonoBehaviour
 
     void DropManaStone()
     {
-        InGameManager.Instance.DropManaStone(transform.position);
+        GameObject manaCube = ObjectPool.Get.GetObject(Defines.key_ManaCube);
+        manaCube.transform.position = transform.position;
+        InGameManager.Instance.EnemyDeadEvent.Invoke();
     }
 
     void ShowDeadEffect()
@@ -73,9 +62,14 @@ public abstract class BaseEnemy : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (other.gameObject.CompareTag(Defines.key_Player) || other.gameObject.CompareTag(Defines.key_PlayerBullet))
+        if (other.gameObject.CompareTag(Defines.key_PlayerBullet))
         {
-            Damage();
+            Hit();
+        }
+
+        if (other.CompareTag(Defines.key_Ground))
+        {
+            ObjectPool.Get.ReturnObject(gameObject);
         }
     }
 
